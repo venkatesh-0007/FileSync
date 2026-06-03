@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FileSync 🔄
 
-## Getting Started
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38B2AC?logo=tailwind-css)
+![Supabase](https://img.shields.io/badge/Supabase-Database%20%26%20Auth-3ECF8E?logo=supabase)
 
-First, run the development server:
+A simple, fully free MVP web application that allows users to upload files from one device and download them on another by logging into the same account.
+
+---
+
+## 🌟 Features
+
+- **Username Authentication**: Login with just a username and password (powered by Supabase).
+- **Secure File Storage**: Files are private and only accessible to the owner via Row Level Security (RLS).
+- **Cross-Device Sync**: Upload on your phone, download on your computer.
+- **Modern UI**: Clean, minimal, dark-mode design using Tailwind CSS.
+- **100% Free**: Uses Supabase's generous free tier for Database, Auth, and Storage—**no credit card required**.
+
+## 🚀 Tech Stack
+
+- **Framework**: [Next.js](https://nextjs.org/) (App Router)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **Backend**: [Supabase](https://supabase.com/) (Auth, Postgres, Storage)
+
+## 🛠️ Setup Instructions
+
+### 1. Create a Supabase Project
+
+1. Go to [Supabase](https://supabase.com/) and create a free account (no credit card required).
+2. Create a new project.
+3. Once the project is provisioned, go to **Project Settings -> API** to get your `Project URL` and `anon public` key.
+
+### 2. Configure Environment Variables
+
+1. Copy `.env.local.example` to `.env.local`:
+   ```bash
+   cp .env.local.example .env.local
+   ```
+2. Fill in your Supabase configuration values:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_project_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   ```
+
+### 3. Setup Database and Storage Schema
+
+You need to create the table, storage bucket, and security policies.
+
+1. Go to your Supabase project dashboard.
+2. Click on **SQL Editor** in the left sidebar.
+3. Click **New Query**.
+4. Open the `schema.sql` file in this repository, copy its entire contents, and paste it into the SQL Editor.
+5. Click **Run**. 
+
+This script will automatically:
+- Create the `files` metadata table.
+- Create the `uploads` storage bucket.
+- Enable Row Level Security (RLS) so users can only access their own files.
+
+### 4. Run Locally
 
 ```bash
+# Install dependencies
+npm install
+
+# Run the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🚀 Deployment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new).
 
-## Learn More
+1. Push your code to a GitHub repository.
+2. Import the project in Vercel.
+3. Add the two `NEXT_PUBLIC_SUPABASE_*` environment variables in the Vercel project settings.
+4. Deploy!
 
-To learn more about Next.js, take a look at the following resources:
+## 🤝 Contributing
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to get started.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 📝 Future Enhancements Roadmap
 
-## Deploy on Vercel
+- [ ] Transfer codes / QR code sharing
+- [ ] File preview (images, pdfs)
+- [ ] Automatic file expiration (e.g., delete after 24 hours)
+- [ ] Clipboard text syncing
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📄 License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
