@@ -40,9 +40,9 @@ export default function Register() {
       setLoading(true);
       await registerWithUsernameDeterministic(username.toLowerCase(), password);
       router.push("/dashboard");
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLoading(false);
-      setError(err.message || "Failed to register. Please try again.");
+      setError(err instanceof Error ? err.message : "Failed to register. Please try again.");
     }
   };
 

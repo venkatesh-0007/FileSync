@@ -32,8 +32,8 @@ export const uploadFile = async (
 
     onProgress(100);
     onComplete(data.path);
-  } catch (err: any) {
-    onError(err);
+  } catch (err: unknown) {
+    onError(err instanceof Error ? err : new Error(String(err)));
   }
 };
 

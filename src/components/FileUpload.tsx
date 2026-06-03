@@ -89,8 +89,8 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
           setSelectedFile(null);
           setProgress(0);
           onUploadSuccess();
-        } catch (err: any) {
-          setError(err.message || "Failed to save file metadata.");
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : "Failed to save file metadata.");
           setUploading(false);
         }
       },

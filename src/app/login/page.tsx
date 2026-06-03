@@ -21,7 +21,8 @@ export default function Login() {
       setLoading(true);
       await loginWithUsername(username.toLowerCase(), password);
       router.push("/dashboard");
-    } catch (err: any) {
+    } catch (err: unknown) {
+      console.error(err);
       setLoading(false);
       setError("Invalid username or password. Please try again.");
     }
@@ -86,7 +87,7 @@ export default function Login() {
           </form>
 
           <div className="mt-6 text-center text-sm text-slate-400">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link href="/register" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
               Sign up
             </Link>

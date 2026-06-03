@@ -54,7 +54,7 @@ export default function Home() {
           </div>
           <div className="bg-slate-800/30 p-6 rounded-2xl border border-slate-700/50">
             <h3 className="text-lg font-semibold text-white mb-2">Simple</h3>
-            <p className="text-slate-400">No complex settings or email verifications. Just a username and you're in.</p>
+            <p className="text-slate-400">No complex settings or email verifications. Just a username and you&apos;re in.</p>
           </div>
         </div>
       </main>

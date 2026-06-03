@@ -21,7 +21,7 @@ export const FileList = ({ refreshTrigger }: { refreshTrigger: number }) => {
         const userFiles = await getUserFiles(user.id);
         setFiles(userFiles);
         setError(null);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error fetching files:", err);
         setError("Failed to load your files. Please try again later.");
       } finally {
