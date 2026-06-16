@@ -19,6 +19,15 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
   const [expiryHours, setExpiryHours] = useState<number | null>(6);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const validateAndSetFile = (file: File) => {
+    setError(null);
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setError(`File size exceeds the ${MAX_FILE_SIZE_MB}MB limit.`);
+      return;
+    }
+    setSelectedFile(file);
+  };
+
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       if (uploading) return;
@@ -67,14 +76,7 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
     }
   };
 
-  const validateAndSetFile = (file: File) => {
-    setError(null);
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setError(`File size exceeds the ${MAX_FILE_SIZE_MB}MB limit.`);
-      return;
-    }
-    setSelectedFile(file);
-  };
+
 
   const handleUpload = () => {
     if (!selectedFile || !user) return;

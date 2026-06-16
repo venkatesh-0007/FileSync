@@ -17,10 +17,7 @@ import {
   Smartphone,
   Tablet as TabletIcon,
   Monitor,
-  Laptop,
-  ChevronDown,
-  Copy,
-  Check
+  Laptop
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { FileMetadata } from "../lib/types";
@@ -185,14 +182,6 @@ export const FileItem = ({ file, index, onDelete, onPreview }: FileItemProps) =>
     };
     fetchThumbnail();
   }, [file, isImage]);
-
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
