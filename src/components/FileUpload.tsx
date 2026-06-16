@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { UploadCloud, File, X, Clock } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { uploadFile } from "../lib/storage";
@@ -18,6 +18,27 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
   const [error, setError] = useState<string | null>(null);
   const [expiryHours, setExpiryHours] = useState<number | null>(6);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (uploading) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file') {
+          const file = items[i].getAsFile();
+          if (file) {
+            validateAndSetFile(file);
+            break;
+          }
+        }
+      }
+    };
+    
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [uploading]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();

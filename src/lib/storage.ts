@@ -1,5 +1,13 @@
 import { supabase } from "./supabase";
 
+const getDeviceType = () => {
+  if (typeof window === "undefined") return "PC";
+  const ua = window.navigator.userAgent;
+  if (/tablet|ipad|playbook|silk/i.test(ua)) return "Tablet";
+  if (/Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/i.test(ua)) return "Mobile";
+  return "PC";
+};
+
 export const uploadFile = async (
   file: File,
   uid: string,
@@ -9,7 +17,8 @@ export const uploadFile = async (
 ) => {
   const timestamp = Date.now();
   const safeFilename = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-  const storagePath = `${uid}/${timestamp}_${safeFilename}`;
+  const deviceType = getDeviceType();
+  const storagePath = `${uid}/${timestamp}_dev-${deviceType}_${safeFilename}`;
 
   // Supabase storage JS SDK doesn't natively support easy progress callbacks like Firebase did,
   // but it's very fast for smaller files. For MVP, we will simulate a quick progress bar or 
