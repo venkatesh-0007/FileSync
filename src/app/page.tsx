@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 
@@ -13,8 +14,8 @@ export default function Home() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-900 to-slate-900"></div>
         
         <div className="max-w-3xl flex flex-col items-center">
-          <div className="bg-blue-500/5 p-4 rounded-3xl mb-8 border border-blue-500/10">
-            <img src="/logo.png" alt="FileSync Logo" className="w-16 h-16 object-contain rounded-2xl shadow-lg" />
+          <div className="bg-slate-800/50 p-4 rounded-3xl mb-8 border border-slate-700">
+            <Image src="/logo.png" alt="FileSync Logo" width={64} height={64} className="rounded-full" />
           </div>
           
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white mb-6">

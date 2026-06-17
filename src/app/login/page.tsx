@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { loginWithUsername } from "@/lib/auth";
 
@@ -39,8 +40,8 @@ export default function Login() {
         
         <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700 p-8 rounded-3xl shadow-xl">
           <div className="flex flex-col items-center mb-8">
-            <div className="bg-blue-500/5 p-3 rounded-2xl mb-4 border border-blue-500/10">
-              <img src="/logo.png" alt="FileSync Logo" className="w-10 h-10 object-contain rounded-xl shadow-md" />
+            <div className="bg-slate-800/50 p-3 rounded-2xl mb-4 border border-slate-700">
+              <Image src="/logo.png" alt="FileSync Logo" width={40} height={40} className="rounded-full" />
             </div>
             <h2 className="text-2xl font-bold text-white">Welcome Back</h2>
             <p className="text-slate-400 text-sm mt-1">Log in to access your files</p>
