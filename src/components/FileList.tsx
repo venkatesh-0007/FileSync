@@ -9,29 +9,62 @@ import { Loader2, FolderOpen, X, Music } from "lucide-react";
 
 export const FileList = ({ refreshTrigger }: { refreshTrigger: number }) => {
   const { user } = useAuth();
+  const userId = user?.id;
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activePreview, setActivePreview] = useState<{ file: FileMetadata; url: string } | null>(null);
 
   useEffect(() => {
+    let active = true;
     const fetchFiles = async () => {
-      if (!user) return;
+      if (!userId) return;
       try {
         setLoading(true);
-        const userFiles = await getUserFiles(user.id);
-        setFiles(userFiles);
-        setError(null);
+        const userFiles = await getUserFiles(userId);
+        if (active) {
+          setFiles(userFiles);
+          setError(null);
+        }
       } catch (err: unknown) {
         console.error("Error fetching files:", err);
-        setError("Failed to load your files. Please try again later.");
+        if (active) {
+          setError("Failed to load your files. Please try again later.");
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     fetchFiles();
-  }, [user, refreshTrigger]);
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (refreshTrigger === 0) return;
+    let active = true;
+    const fetchFilesSilent = async () => {
+      if (!userId) return;
+      try {
+        const userFiles = await getUserFiles(userId);
+        if (active) {
+          setFiles(userFiles);
+          setError(null);
+        }
+      } catch (err: unknown) {
+        console.error("Silent refetch failed:", err);
+      }
+    };
+
+    fetchFilesSilent();
+    return () => {
+      active = false;
+    };
+  }, [refreshTrigger, userId]);
 
   const handleDelete = (deletedId: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== deletedId));
