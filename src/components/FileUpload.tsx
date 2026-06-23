@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { UploadCloud, File, X, Clock } from "lucide-react";
+import { UploadCloud, File, X, Clock, Pencil } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { uploadFile } from "../lib/storage";
 import { addFileMetadata } from "../lib/db";
@@ -17,6 +17,8 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [expiryHours, setExpiryHours] = useState<number | null>(6);
+  const [baseName, setBaseName] = useState<string>("");
+  const [extension, setExtension] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const validateAndSetFile = (file: File) => {
@@ -26,6 +28,15 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
       return;
     }
     setSelectedFile(file);
+
+    const lastDot = file.name.lastIndexOf('.');
+    if (lastDot !== -1) {
+      setBaseName(file.name.substring(0, lastDot));
+      setExtension(file.name.substring(lastDot));
+    } else {
+      setBaseName(file.name);
+      setExtension("");
+    }
   };
 
   useEffect(() => {
@@ -81,6 +92,8 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
   const handleUpload = () => {
     if (!selectedFile || !user) return;
 
+    const finalFilename = `${baseName.trim() || "untitled"}${extension}`;
+
     setUploading(true);
     setProgress(0);
     setError(null);
@@ -102,7 +115,7 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
 
           await addFileMetadata({
             owner_uid: user.id,
-            filename: selectedFile.name,
+            filename: finalFilename,
             storage_path: storagePath,
             file_size: selectedFile.size,
             expires_at,
@@ -110,6 +123,8 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
           
           setUploading(false);
           setSelectedFile(null);
+          setBaseName("");
+          setExtension("");
           setProgress(0);
           onUploadSuccess();
         } catch (err: unknown) {
@@ -120,7 +135,8 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
       (err) => {
         setError(err.message || "Failed to upload file.");
         setUploading(false);
-      }
+      },
+      finalFilename
     );
   };
 
@@ -152,14 +168,33 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
             <p className="text-slate-400 text-sm mt-2">Maximum file size: {MAX_FILE_SIZE_MB}MB</p>
           </>
         ) : (
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center w-full max-w-sm">
             <File className="w-10 h-10 text-blue-400 mb-3" />
-            <p className="text-slate-200 font-medium break-all">{selectedFile.name}</p>
-            <p className="text-slate-400 text-sm mt-1">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+            
+            {/* Editable Filename Input */}
+            <div 
+              className="flex items-center gap-2 bg-slate-900/60 border border-slate-700 focus-within:border-blue-500 rounded-xl px-3 py-2 text-slate-200 text-sm w-full max-w-[280px]"
+              onClick={(e) => e.stopPropagation() /* Prevent opening file selector when clicking input */}
+            >
+              <Pencil className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <input
+                type="text"
+                value={baseName}
+                onChange={(e) => setBaseName(e.target.value.replace(/[/\\?%*:|"<>]/g, ""))}
+                disabled={uploading}
+                className="bg-transparent outline-none w-full text-slate-200 font-medium placeholder-slate-500 text-center sm:text-left"
+                placeholder="Rename file"
+              />
+              {extension && (
+                <span className="text-slate-500 font-mono select-none shrink-0">{extension}</span>
+              )}
+            </div>
+
+            <p className="text-slate-400 text-sm mt-2">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
             
             {!uploading && (
               <button 
-                onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
+                onClick={(e) => { e.stopPropagation(); setSelectedFile(null); setBaseName(""); setExtension(""); }}
                 className="mt-4 flex items-center gap-1 text-sm text-red-400 hover:text-red-300 bg-red-400/10 hover:bg-red-400/20 px-3 py-1.5 rounded-full transition-colors"
               >
                 <X className="w-4 h-4" /> Remove

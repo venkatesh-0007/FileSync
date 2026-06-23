@@ -13,10 +13,12 @@ export const uploadFile = async (
   uid: string,
   onProgress: (progress: number) => void,
   onComplete: (storagePath: string) => void,
-  onError: (error: Error) => void
+  onError: (error: Error) => void,
+  customFilename?: string
 ) => {
   const timestamp = Date.now();
-  const safeFilename = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+  const filenameToUse = customFilename || file.name;
+  const safeFilename = filenameToUse.replace(/[^a-zA-Z0-9.\-_]/g, "_");
   const deviceType = getDeviceType();
   const storagePath = `${uid}/${timestamp}_dev-${deviceType}_${safeFilename}`;
 

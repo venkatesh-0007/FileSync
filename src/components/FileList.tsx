@@ -37,6 +37,10 @@ export const FileList = ({ refreshTrigger }: { refreshTrigger: number }) => {
     setFiles((prev) => prev.filter((f) => f.id !== deletedId));
   };
 
+  const handleUpdate = (updatedFile: FileMetadata) => {
+    setFiles((prev) => prev.map((f) => f.id === updatedFile.id ? updatedFile : f));
+  };
+
   const handlePreviewClose = () => setActivePreview(null);
 
   const renderPreviewContent = () => {
@@ -163,6 +167,7 @@ export const FileList = ({ refreshTrigger }: { refreshTrigger: number }) => {
             index={index} 
             onDelete={handleDelete} 
             onPreview={(url) => setActivePreview({ file, url })}
+            onUpdate={handleUpdate}
           />
         ))}
       </div>

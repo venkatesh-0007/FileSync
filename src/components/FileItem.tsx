@@ -17,12 +17,13 @@ import {
   Smartphone,
   Tablet as TabletIcon,
   Monitor,
-  Laptop
+  Laptop,
+  Pencil
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { FileMetadata } from "../lib/types";
 import { getFileDownloadURL, deleteFileFromStorage } from "../lib/storage";
-import { deleteFileMetadata } from "../lib/db";
+import { deleteFileMetadata, updateFileMetadata } from "../lib/db";
 
 // Detect file type category based on extension
 export const getFileType = (filename: string) => {
@@ -151,9 +152,10 @@ interface FileItemProps {
   index: number;
   onDelete: (fileId: string) => void;
   onPreview: (url: string) => void;
+  onUpdate: (updatedFile: FileMetadata) => void;
 }
 
-export const FileItem = ({ file, index, onDelete, onPreview }: FileItemProps) => {
+export const FileItem = ({ file, index, onDelete, onPreview, onUpdate }: FileItemProps) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -163,6 +165,47 @@ export const FileItem = ({ file, index, onDelete, onPreview }: FileItemProps) =>
   
   // For modal preview (fetched on click for non-images to avoid token expiration and excess requests)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
+  // For editing file details behind flip
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedBaseName, setEditedBaseName] = useState("");
+  const [editedExpiryOption, setEditedExpiryOption] = useState("keep");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const extIndex = file.filename.lastIndexOf('.');
+  const ext = extIndex !== -1 ? file.filename.substring(extIndex) : "";
+
+  const handleSaveEdit = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!editedBaseName.trim()) {
+      alert("Filename cannot be empty.");
+      return;
+    }
+    const newFilename = `${editedBaseName.trim()}${ext}`;
+
+    let newExpiresAt: string | null | undefined = undefined;
+    if (editedExpiryOption === "1h") {
+      newExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    } else if (editedExpiryOption === "6h") {
+      newExpiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+    } else if (editedExpiryOption === "24h") {
+      newExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    } else if (editedExpiryOption === "never") {
+      newExpiresAt = null;
+    }
+
+    try {
+      setIsSaving(true);
+      const updatedFile = await updateFileMetadata(file.id, newFilename, newExpiresAt);
+      setIsEditing(false);
+      onUpdate(updatedFile);
+    } catch (err) {
+      console.error("Failed to update file metadata:", err);
+      alert("Failed to update file details. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const isImage = getFileType(file.filename) === 'image';
   const isPreviewable = getFileType(file.filename) !== 'unknown';
@@ -336,80 +379,167 @@ export const FileItem = ({ file, index, onDelete, onPreview }: FileItemProps) =>
         >
           {/* Top: Details title & Flip Back */}
           <div className="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
-            <span className="text-slate-200 text-xs font-semibold uppercase tracking-wider">File Details</span>
-            <button
-              onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }}
-              className="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-1 rounded-md transition-colors"
-              title="Back to front"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+            <span className="text-slate-200 text-xs font-semibold uppercase tracking-wider">
+              {isEditing ? "Edit File Details" : "File Details"}
+            </span>
+            <div className="flex items-center gap-1.5">
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const lastDot = file.filename.lastIndexOf('.');
+                      setEditedBaseName(lastDot !== -1 ? file.filename.substring(0, lastDot) : file.filename);
+                      setEditedExpiryOption("keep");
+                      setIsEditing(false);
+                    }}
+                    className="text-slate-400 hover:text-slate-200 text-xs font-medium px-2 py-1 rounded bg-slate-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={isSaving}
+                    className="text-blue-400 hover:text-blue-300 text-xs font-semibold px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 transition-colors flex items-center gap-1"
+                  >
+                    {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const lastDot = file.filename.lastIndexOf('.');
+                      setEditedBaseName(lastDot !== -1 ? file.filename.substring(0, lastDot) : file.filename);
+                      setEditedExpiryOption("keep");
+                      setIsEditing(true);
+                    }}
+                    className="text-blue-400 hover:text-blue-300 text-xs font-semibold px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }}
+                    className="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-1 rounded-md transition-colors"
+                    title="Back to front"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Middle: Details Grid (Storage Key Removed, Exact MB Size Added) */}
+          {/* Middle: Details Grid */}
           <div className="flex-1 flex flex-col justify-start gap-2 py-3 overflow-y-auto text-xs min-h-0 select-text no-scrollbar">
-            <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
-              <span className="text-slate-500">Device</span>
-              <span className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium ${deviceBadge.color}`}>
-                <deviceBadge.icon className="w-3.5 h-3.5" />
-                {deviceType}
-              </span>
-            </div>
-            
-            <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
-              <span className="text-slate-500">Size (MB)</span>
-              <span className="font-mono text-slate-200">{formatSizeInMB(file.file_size)}</span>
-            </div>
+            {isEditing ? (
+              <>
+                <div className="flex flex-col gap-1 py-1 border-b border-slate-800/40">
+                  <span className="text-slate-500 font-medium">Filename</span>
+                  <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 focus-within:border-blue-500 rounded px-2 py-1 mt-0.5 text-slate-200 font-medium">
+                    <Pencil className="w-3 h-3 text-slate-500 shrink-0" />
+                    <input
+                      type="text"
+                      value={editedBaseName}
+                      onChange={(e) => setEditedBaseName(e.target.value.replace(/[/\\?%*:|"<>]/g, ""))}
+                      className="bg-transparent outline-none w-full text-slate-200 font-mono text-xs"
+                      disabled={isSaving}
+                      placeholder="Filename"
+                    />
+                    <span className="text-slate-500 font-mono select-none">{ext}</span>
+                  </div>
+                </div>
 
-            <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
-              <span className="text-slate-500">Extension</span>
-              <span className="uppercase font-mono text-slate-200">{file.filename.split('.').pop() || 'None'}</span>
-            </div>
+                <div className="flex flex-col gap-1 py-1 border-b border-slate-800/40">
+                  <span className="text-slate-500 font-medium">Expiry / Availability</span>
+                  <select
+                    value={editedExpiryOption}
+                    onChange={(e) => setEditedExpiryOption(e.target.value)}
+                    className="bg-slate-950 text-slate-200 outline-none border border-slate-800 focus:border-blue-500 rounded px-2 py-1 text-xs w-full cursor-pointer font-mono mt-0.5"
+                    disabled={isSaving}
+                  >
+                    <option value="keep">No Change</option>
+                    <option value="1h">1 Hour from now</option>
+                    <option value="6h">6 Hours from now</option>
+                    <option value="24h">24 Hours from now</option>
+                    <option value="never">Never Expires</option>
+                  </select>
+                </div>
 
-            <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
-              <span className="text-slate-500">Uploaded</span>
-              <span className="text-slate-200 text-right truncate max-w-[140px]" title={new Date(file.uploaded_at).toLocaleString()}>
-                {new Date(file.uploaded_at).toLocaleDateString()}
-              </span>
-            </div>
+                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
+                  <span className="text-slate-500">Size (MB)</span>
+                  <span className="font-mono text-slate-400">{formatSizeInMB(file.file_size)}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
+                  <span className="text-slate-500">Device</span>
+                  <span className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium ${deviceBadge.color}`}>
+                    <deviceBadge.icon className="w-3.5 h-3.5" />
+                    {deviceType}
+                  </span>
+                </div>
+                
+                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
+                  <span className="text-slate-500">Size (MB)</span>
+                  <span className="font-mono text-slate-200">{formatSizeInMB(file.file_size)}</span>
+                </div>
 
-            <div className="flex items-center justify-between py-1">
-              <span className="text-slate-500">Expires</span>
-              <span className="text-slate-200 text-right truncate max-w-[140px]" title={file.expires_at ? new Date(file.expires_at).toLocaleString() : 'Never'}>
-                {file.expires_at ? new Date(file.expires_at).toLocaleDateString() : 'Never'}
-              </span>
-            </div>
+                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
+                  <span className="text-slate-500">Extension</span>
+                  <span className="uppercase font-mono text-slate-200">{file.filename.split('.').pop() || 'None'}</span>
+                </div>
+
+                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
+                  <span className="text-slate-500">Uploaded</span>
+                  <span className="text-slate-200 text-right truncate max-w-[140px]" title={new Date(file.uploaded_at).toLocaleString()}>
+                    {new Date(file.uploaded_at).toLocaleDateString()}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-slate-500">Expires</span>
+                  <span className="text-slate-200 text-right truncate max-w-[140px]" title={file.expires_at ? new Date(file.expires_at).toLocaleString() : 'Never'}>
+                    {file.expires_at ? new Date(file.expires_at).toLocaleDateString() : 'Never'}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Bottom Part: Action Buttons */}
-          <div className="border-t border-slate-800 pt-3 mt-auto shrink-0 flex justify-end gap-1.5">
-            {isPreviewable && (
+          {!isEditing && (
+            <div className="border-t border-slate-800 pt-3 mt-auto shrink-0 flex justify-end gap-1.5">
+              {isPreviewable && (
+                <button
+                  onClick={handlePreview}
+                  disabled={isDeleting || isDownloading || isPreviewLoading}
+                  className="p-1.5 text-slate-400 hover:text-green-400 hover:bg-green-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
+                  title="Preview file"
+                >
+                  {isPreviewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                </button>
+              )}
               <button
-                onClick={handlePreview}
-                disabled={isDeleting || isDownloading || isPreviewLoading}
-                className="p-1.5 text-slate-400 hover:text-green-400 hover:bg-green-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
-                title="Preview file"
+                onClick={handleDownload}
+                disabled={isDownloading || isDeleting}
+                className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
+                title="Download file"
               >
-                {isPreviewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               </button>
-            )}
-            <button
-              onClick={handleDownload}
-              disabled={isDownloading || isDeleting}
-              className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
-              title="Download file"
-            >
-              {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting || isDownloading}
-              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
-              title="Delete file"
-            >
-              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            </button>
-          </div>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting || isDownloading}
+                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
+                title="Delete file"
+              >
+                {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

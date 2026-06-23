@@ -33,3 +33,24 @@ export const deleteFileMetadata = async (fileId: string) => {
 
   if (error) throw error;
 };
+
+export const updateFileMetadata = async (
+  fileId: string,
+  filename: string,
+  expires_at: string | null | undefined
+): Promise<FileMetadata> => {
+  const updateData: { filename: string; expires_at?: string | null } = { filename };
+  if (expires_at !== undefined) {
+    updateData.expires_at = expires_at;
+  }
+
+  const { data, error } = await supabase
+    .from("files")
+    .update(updateData)
+    .eq("id", fileId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as FileMetadata;
+};

@@ -31,6 +31,13 @@ on public.files for delete
 to authenticated
 using ( auth.uid() = owner_uid );
 
+-- Users can update their own files
+create policy "Users can update their own files"
+on public.files for update
+to authenticated
+using ( auth.uid() = owner_uid )
+with check ( auth.uid() = owner_uid );
+
 -- 4. Create the storage bucket for uploads
 insert into storage.buckets (id, name, public) 
 values ('uploads', 'uploads', false);
