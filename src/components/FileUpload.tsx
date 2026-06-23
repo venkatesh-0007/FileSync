@@ -143,7 +143,7 @@ export const FileUpload = ({ onUploadSuccess }: { onUploadSuccess: () => void })
   return (
     <div className="w-full bg-slate-800/50 rounded-2xl border border-slate-700 p-6 flex flex-col gap-4">
       <div 
-        className={`w-full relative border-2 border-dashed rounded-xl p-8 text-center flex flex-col items-center justify-center transition-colors cursor-pointer
+        className={`w-full relative border-2 border-dashed rounded-xl py-20 px-8 text-center flex flex-col items-center justify-center transition-colors cursor-pointer
           ${dragActive ? "border-blue-500 bg-blue-500/10" : "border-slate-600 hover:border-slate-500 hover:bg-slate-700/30"}
           ${uploading ? "opacity-50 pointer-events-none" : ""}
         `}
