@@ -6,53 +6,28 @@ Designed for students and everyday users, FileSync eliminates the need for USB d
 
 ## Features
 
-* Username and password authentication
-* Secure file uploads
-* Access files from any device
-* Download files anytime
-* Delete unwanted files
-* Personal file dashboard
-* Responsive design for mobile and desktop
-* Secure user-specific file access
+* **Real-Time File Uploads**: Real progress tracking (XMLHttpRequest byte-level progress), cancellation support, retry states, and orphaned file prevention.
+* **Storage Quota Management**: Visual storage headroom meter, customizable limits, and quota enforcement.
+* **File Organization**: Create, rename, delete folders, and organize files with breadcrumb navigation.
+* **Smart Search & Filters**: Instant filename search, file type filtering pills (Images, PDFs, Videos, Audio, Code/Docs, Office), date range filters, and multi-key sorting.
+* **Favorites / Starred**: One-click starring and dedicated favorites view.
+* **Safe Trash & Retention**: Two-stage deletion (Trash → Permanent Delete) with restore support and 30-day automated cleanup.
+* **Temporary Sharing & Transfers**: Generate secure expiring share links, track download counts, and revoke links anytime.
+* **6-Character Transfer Codes**: Transfer files between devices instantly without login using short codes.
+* **Mobile QR Transfers**: Instant camera scan to download files on smartphones.
+* **Device Session Tracking**: See active devices, browser/OS detection, and last active timestamps.
+* **Activity Audit History**: Track uploads, downloads, moves, and shares.
+* **Rich In-Browser Previews**: Images, PDFs, text/code, audio, video, and Office document viewer.
+* **Supabase Keep-Alive & Cleanup Crons**: Automated daily pings preventing 7-day inactivity pause and automated trash/expired file cleanup.
 
 ## Tech Stack
 
-* Next.js
+* Next.js 16 (App Router & Turbopack)
 * TypeScript
 * Tailwind CSS
-* Supabase Authentication
-* Supabase Database
-* Supabase Storage
-* Vercel Deployment
-
-## How It Works
-
-1. Create an account with a username and password.
-2. Upload files from your device.
-3. Log in from another device using the same account.
-4. Access and download your uploaded files instantly.
-
-## Security
-
-* Authentication required for file access.
-* Users can only view and manage their own files.
-* File metadata is securely stored in the database.
-* Storage access is protected through Supabase policies.
-
-## Use Cases
-
-* Transfer files between phone and laptop.
-* Access study materials from college computers.
-* Store important documents online.
-* Quickly share files across personal devices.
-
-## Live Demo
-
-Add your deployed Vercel URL here:
-
-```text
-https://your-project-name.vercel.app
-```
+* Supabase Authentication, Database & Storage
+* Vercel Cron
+* QRCode generator
 
 ## Installation
 
@@ -74,6 +49,7 @@ Create a `.env.local` file and add your credentials:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 CRON_SECRET=your_cron_secret
+NEXT_PUBLIC_STORAGE_LIMIT_MB=500
 ```
 
 Run locally:
