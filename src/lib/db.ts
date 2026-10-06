@@ -24,11 +24,54 @@ export interface GetUserFilesOptions {
  * Inserts metadata for a newly uploaded file.
  */
 export const addFileMetadata = async (metadata: Omit<FileMetadata, "id" | "uploaded_at">) => {
-  const { data, error } = await supabase
+  // Construct clean payload, only including defined optional fields
+  const payload: Record<string, unknown> = {
+    owner_uid: metadata.owner_uid,
+    filename: metadata.filename,
+    storage_path: metadata.storage_path,
+    file_size: metadata.file_size,
+    expires_at: metadata.expires_at,
+  };
+
+  if (metadata.folder_id) {
+    payload.folder_id = metadata.folder_id;
+  }
+  if (metadata.is_starred !== undefined) {
+    payload.is_starred = metadata.is_starred;
+  }
+  if (metadata.is_deleted !== undefined) {
+    payload.is_deleted = metadata.is_deleted;
+  }
+
+  let { data, error } = await supabase
     .from("files")
-    .insert([metadata])
+    .insert([payload])
     .select()
     .single();
+
+  // If column error occurs (e.g. schema migration pending for folder_id/is_starred), fallback to baseline columns
+  if (error) {
+    console.warn("Advanced metadata insert failed, retrying with base columns:", error.message);
+    const basePayload = {
+      owner_uid: metadata.owner_uid,
+      filename: metadata.filename,
+      storage_path: metadata.storage_path,
+      file_size: metadata.file_size,
+      expires_at: metadata.expires_at,
+    };
+
+    const retry = await supabase
+      .from("files")
+      .insert([basePayload])
+      .select()
+      .single();
+
+    if (retry.error) {
+      throw retry.error;
+    }
+    data = retry.data;
+    error = null;
+  }
 
   if (error) throw error;
 
@@ -115,14 +158,25 @@ export const getUserFiles = async (
  * Calculates the total storage used by a user in bytes.
  */
 export const getUserStorageUsage = async (uid: string): Promise<number> => {
-  const { data, error } = await supabase
+  const { data: initialData, error } = await supabase
     .from("files")
     .select("file_size, is_deleted")
     .eq("owner_uid", uid);
 
+  let data = initialData as unknown as { file_size: number; is_deleted?: boolean }[] | null;
+
   if (error) {
-    console.warn("Could not calculate storage usage:", error);
-    return 0;
+    // Fallback if is_deleted column does not exist
+    const baseQuery = await supabase
+      .from("files")
+      .select("file_size")
+      .eq("owner_uid", uid);
+
+    if (baseQuery.error) {
+      console.warn("Could not calculate storage usage:", baseQuery.error.message);
+      return 0;
+    }
+    data = (baseQuery.data || []) as unknown as { file_size: number; is_deleted?: boolean }[];
   }
 
   // Count files that are not permanently deleted
