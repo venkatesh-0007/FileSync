@@ -25,17 +25,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     // Check active sessions and sets the user
     const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        setUser(session.user);
-        setUserProfile({
-          id: session.user.id,
-          username: session.user.user_metadata?.username || "User",
-          hiddenEmail: session.user.email || "",
-        });
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          setUser(session.user);
+          setUserProfile({
+            id: session.user.id,
+            username: session.user.user_metadata?.username || "User",
+            hiddenEmail: session.user.email || "",
+          });
+        }
+      } catch (e) {
+        console.warn("Unable to fetch session:", e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     getSession();

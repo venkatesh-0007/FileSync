@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, AlertTriangle } from "lucide-react";
 import { registerWithUsernameDeterministic } from "@/lib/auth";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 export default function Register() {
   const [username, setUsername] = useState("");
@@ -18,6 +19,11 @@ export default function Register() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!isSupabaseConfigured) {
+      setError("Supabase is not configured. Please add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your environment variables (or Vercel Project Settings) and redeploy.");
+      return;
+    }
 
     // Validation
     if (username.length < 3) {
@@ -43,7 +49,12 @@ export default function Register() {
       router.push("/dashboard");
     } catch (err: unknown) {
       setLoading(false);
-      setError(err instanceof Error ? err.message : "Failed to register. Please try again.");
+      const rawMsg = err instanceof Error ? err.message : "Failed to register. Please try again.";
+      if (rawMsg.includes("Failed to fetch") || rawMsg.includes("placeholder.supabase.co") || rawMsg.includes("ERR_NAME_NOT_RESOLVED")) {
+        setError("Unable to connect to Supabase. Please ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in your Vercel Project Settings and redeploy.");
+      } else {
+        setError(rawMsg);
+      }
     }
   };
 
@@ -57,13 +68,25 @@ export default function Register() {
         </Link>
         
         <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700 p-8 rounded-3xl shadow-xl">
-          <div className="flex flex-col items-center mb-8">
+          <div className="flex flex-col items-center mb-6">
             <div className="bg-slate-800/50 p-3 rounded-2xl mb-4 border border-slate-700">
               <Image src="/logo.png" alt="FileSync Logo" width={40} height={40} className="rounded-full" />
             </div>
             <h2 className="text-2xl font-bold text-white">Create an Account</h2>
             <p className="text-slate-400 text-sm mt-1">Join FileSync to manage your files everywhere</p>
           </div>
+
+          {!isSupabaseConfigured && (
+            <div className="bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs p-3.5 rounded-xl mb-4 leading-relaxed flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-300 mb-0.5">Missing Supabase Configuration</p>
+                <p className="text-slate-300">
+                  Please configure <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in your Vercel Project Settings (Environment Variables), then redeploy your application.
+                </p>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleRegister} className="flex flex-col gap-4">
             <div>

@@ -1,10 +1,19 @@
-import { supabase } from "./supabase";
+import { supabase, isSupabaseConfigured } from "./supabase";
 import { v4 as uuidv4 } from "uuid";
 
 // We generate a hidden email to satisfy Supabase's email/password auth
 const generateHiddenEmail = () => `user_${uuidv4()}@example.com`;
 
+const ensureConfigured = () => {
+  if (!isSupabaseConfigured) {
+    throw new Error(
+      "Supabase environment variables are missing. Please add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your Vercel Project Settings > Environment Variables, then redeploy."
+    );
+  }
+};
+
 export const registerWithUsername = async (username: string, password: string) => {
+  ensureConfigured();
   const hiddenEmail = generateHiddenEmail();
 
   // Supabase Auth allows storing custom metadata on signup
@@ -23,14 +32,7 @@ export const registerWithUsername = async (username: string, password: string) =
 };
 
 export const loginWithUsername = async (username: string, password: string) => {
-  // Supabase doesn't easily let us query the auth.users table anonymously for a username.
-  // Wait, if the user tries to login with a username, we don't know their hidden email!
-  
-  // To fix this without an insecure public users table:
-  // We can try logging in via a Supabase Edge Function, OR simpler:
-  // For this MVP, we will use a pseudo-email: `[username]@example.com`
-  
-  // Ah, actually, if we use `username@example.com` as the email, it solves the lookup problem!
+  ensureConfigured();
   const pseudoEmail = `${username}@example.com`;
   
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -44,6 +46,7 @@ export const loginWithUsername = async (username: string, password: string) => {
 
 // Update register to use the deterministic pseudo-email
 export const registerWithUsernameDeterministic = async (username: string, password: string) => {
+  ensureConfigured();
   const pseudoEmail = `${username}@example.com`;
 
   const { data, error } = await supabase.auth.signUp({
@@ -61,6 +64,7 @@ export const registerWithUsernameDeterministic = async (username: string, passwo
 };
 
 export const logoutUser = async () => {
+  if (!isSupabaseConfigured) return;
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 };
