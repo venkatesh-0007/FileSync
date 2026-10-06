@@ -60,3 +60,21 @@ create policy "Users can delete their own storage objects"
 on storage.objects for delete
 to authenticated
 using ( bucket_id = 'uploads' and auth.uid()::text = (storage.foldername(name))[1] );
+
+-- 6. Keep-Alive Function (Prevents Supabase Free tier inactivity pause)
+-- Performs a lightweight, harmless query returning the current server timestamp.
+create or replace function public.keep_alive()
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'status', 'ok',
+    'timestamp', now()
+  );
+$$;
+
+-- Grant execution permissions to anon, authenticated, and service_role
+grant execute on function public.keep_alive() to anon, authenticated, service_role;
+
