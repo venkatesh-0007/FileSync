@@ -68,11 +68,12 @@ Install dependencies:
 npm install
 ```
 
-Create a `.env.local` file and add your Supabase credentials:
+Create a `.env.local` file and add your credentials:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+CRON_SECRET=your_cron_secret
 ```
 
 Run locally:
@@ -85,6 +86,68 @@ Open:
 
 ```text
 http://localhost:3000
+```
+
+## Supabase Inactivity Prevention (Keep-Alive Cron)
+
+Supabase Free tier projects automatically pause after 7 consecutive days of inactivity. FileSync includes an automated daily keep-alive mechanism to keep your project active:
+
+1. **Database RPC Function (`keep_alive`)**:
+   Execute the SQL snippet from `schema.sql` (Section 6) in the **Supabase SQL Editor**:
+   ```sql
+   create or replace function public.keep_alive()
+   returns jsonb
+   language sql
+   security definer
+   set search_path = public
+   as $$
+     select jsonb_build_object(
+       'status', 'ok',
+       'timestamp', now()
+     );
+   $$;
+
+   grant execute on function public.keep_alive() to anon, authenticated, service_role;
+   ```
+   This executes a lightweight, harmless query that generates database activity without touching or modifying user or file data.
+
+2. **API Endpoint (`/api/keep-supabase-alive`)**:
+   Invokes the Supabase `keep_alive()` function. Protected by `CRON_SECRET` using timing-safe bearer token verification.
+
+3. **Vercel Cron (`vercel.json`)**:
+   Automatically pings `/api/keep-supabase-alive` once every day at 00:00 UTC (`0 0 * * *`).
+
+### Configuring in Production (Vercel)
+
+1. Generate a secure random secret:
+   ```bash
+   openssl rand -hex 32
+   ```
+2. Go to your **Vercel Project Settings > Environment Variables** and add:
+   * `CRON_SECRET`: The generated random secret
+   * `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase Project URL
+   * `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase Anon Key
+3. Deploy to Vercel. Vercel automatically attaches `Authorization: Bearer <CRON_SECRET>` when triggering the daily cron.
+
+### Manual Verification
+
+You can test the keep-alive endpoint with `curl`:
+
+```bash
+curl -i -H "Authorization: Bearer <your_cron_secret>" https://your-project.vercel.app/api/keep-supabase-alive
+```
+
+Expected response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Supabase keep-alive ping successful",
+  "data": {
+    "status": "ok",
+    "timestamp": "2026-10-06T04:26:00.000000+00:00"
+  },
+  "timestamp": "2026-10-06T04:26:00.123Z"
+}
 ```
 
 ## Future Enhancements
