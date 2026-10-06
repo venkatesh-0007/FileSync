@@ -17,20 +17,29 @@ export const Navbar = () => {
           <span>FileSync</span>
         </Link>
 
-        {userProfile && (
-          <div className="flex items-center gap-4">
-            <span className="text-slate-300 text-sm hidden sm:inline-block">
-              Welcome, <span className="font-semibold text-white">{userProfile.username}</span>
-            </span>
-            <button
-              onClick={() => logoutUser()}
-              className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors p-2"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline-block">Logout</span>
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          <Link
+            href="/transfer"
+            className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-xl border border-blue-500/20 font-medium transition-colors"
+          >
+            Receive File
+          </Link>
+
+          {userProfile && (
+            <div className="flex items-center gap-4">
+              <span className="text-slate-300 text-sm hidden sm:inline-block">
+                Welcome, <span className="font-semibold text-white">{userProfile.username}</span>
+              </span>
+              <button
+                onClick={() => logoutUser()}
+                className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors p-2"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline-block">Logout</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );
