@@ -7,7 +7,6 @@ import {
   File, 
   Loader2, 
   Eye, 
-  X,
   FileImage, 
   FileText, 
   Video, 
@@ -18,12 +17,28 @@ import {
   Tablet as TabletIcon,
   Monitor,
   Laptop,
-  Pencil
+  Pencil,
+  Star,
+  Share2,
+  FolderInput,
+  RotateCcw,
+  Info
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { FileMetadata } from "../lib/types";
 import { getFileDownloadURL, deleteFileFromStorage } from "../lib/storage";
-import { deleteFileMetadata, updateFileMetadata } from "../lib/db";
+import { 
+  deleteFileMetadata, 
+  updateFileMetadata, 
+  softDeleteFile, 
+  restoreFileFromTrash, 
+  toggleStarFile 
+} from "../lib/db";
+import { formatBytes } from "../lib/config";
+import { ShareModal } from "./ShareModal";
+import { MoveFolderModal } from "./MoveFolderModal";
+import { FileDetailsModal } from "./FileDetailsModal";
+import { useAuth } from "./AuthProvider";
 
 // Detect file type category based on extension
 export const getFileType = (filename: string) => {
@@ -38,7 +53,7 @@ export const getFileType = (filename: string) => {
 };
 
 // Map file types to appropriate Lucide icons and Tailwind styles
-const getFileIconInfo = (filename: string) => {
+export const getFileIconInfo = (filename: string) => {
   const type = getFileType(filename);
   switch (type) {
     case 'image':
@@ -51,12 +66,13 @@ const getFileIconInfo = (filename: string) => {
       return { icon: Video, color: 'text-pink-400 bg-pink-500/10 border-pink-500/20' };
     case 'text':
       return { icon: FileCode, color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
-    case 'office':
+    case 'office': {
       const ext = filename.split('.').pop()?.toLowerCase() || '';
       if (['xls', 'xlsx'].includes(ext)) {
         return { icon: FileSpreadsheet, color: 'text-teal-400 bg-teal-500/10 border-teal-500/20' };
       }
       return { icon: FileText, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' };
+    }
     default:
       return { icon: File, color: 'text-slate-400 bg-slate-500/10 border-slate-500/20' };
   }
@@ -70,24 +86,17 @@ const getDeviceFromPath = (path: string): 'PC' | 'Mobile' | 'Tablet' | 'Unknown'
   return 'Unknown';
 };
 
-// Get device badge color and icon
 const getDeviceBadgeInfo = (deviceType: 'PC' | 'Mobile' | 'Tablet' | 'Unknown') => {
   switch (deviceType) {
     case 'PC':
-      return { icon: Monitor, color: 'text-sky-400 bg-sky-500/10 border border-sky-500/20' };
+      return { icon: Monitor, color: 'text-sky-400 bg-sky-500/10 border-sky-500/20' };
     case 'Mobile':
-      return { icon: Smartphone, color: 'text-violet-400 bg-violet-500/10 border border-violet-500/20' };
+      return { icon: Smartphone, color: 'text-violet-400 bg-violet-500/10 border-violet-500/20' };
     case 'Tablet':
-      return { icon: TabletIcon, color: 'text-fuchsia-400 bg-fuchsia-500/10 border border-fuchsia-500/20' };
+      return { icon: TabletIcon, color: 'text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/20' };
     default:
-      return { icon: Laptop, color: 'text-slate-400 bg-slate-500/10 border border-slate-500/20' };
+      return { icon: Laptop, color: 'text-slate-400 bg-slate-500/10 border-slate-500/20' };
   }
-};
-
-const formatSizeInMB = (bytes: number): string => {
-  const mb = bytes / (1024 * 1024);
-  if (mb < 0.01) return "< 0.01 MB";
-  return mb.toFixed(2) + " MB";
 };
 
 // TextPreview component to load and safely render text content in dark mode styling
@@ -102,7 +111,6 @@ export const TextPreview = ({ url, filename }: { url: string; filename: string }
         const res = await fetch(url);
         if (!res.ok) throw new Error("Failed to load text content");
         const text = await res.text();
-        // Limit preview size to 1MB to avoid locking browser
         setContent(text.slice(0, 1024 * 1024)); 
       } catch (err) {
         console.error(err);
@@ -150,23 +158,33 @@ export const TextPreview = ({ url, filename }: { url: string; filename: string }
 interface FileItemProps {
   file: FileMetadata;
   index: number;
+  isTrash?: boolean;
   onDelete: (fileId: string) => void;
   onPreview: (url: string) => void;
   onUpdate: (updatedFile: FileMetadata) => void;
 }
 
-export const FileItem = ({ file, index, onDelete, onPreview, onUpdate }: FileItemProps) => {
+export const FileItem = ({ 
+  file, 
+  index, 
+  isTrash = false, 
+  onDelete, 
+  onPreview, 
+  onUpdate 
+}: FileItemProps) => {
+  const { user } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  
-  // For small image thumbnail (pre-fetched on mount)
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  
-  // For modal preview (fetched on click for non-images to avoid token expiration and excess requests)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
-  // For editing file details behind flip
+  // Modals state
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isMoveOpen, setIsMoveOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+
+  // Edit details behind flip
   const [isEditing, setIsEditing] = useState(false);
   const [editedBaseName, setEditedBaseName] = useState("");
   const [editedExpiryOption, setEditedExpiryOption] = useState("keep");
@@ -174,6 +192,36 @@ export const FileItem = ({ file, index, onDelete, onPreview, onUpdate }: FileIte
 
   const extIndex = file.filename.lastIndexOf('.');
   const ext = extIndex !== -1 ? file.filename.substring(extIndex) : "";
+
+  const isImage = getFileType(file.filename) === 'image';
+  const isPreviewable = getFileType(file.filename) !== 'unknown';
+  const deviceType = getDeviceFromPath(file.storage_path);
+  const deviceBadge = getDeviceBadgeInfo(deviceType);
+  const DeviceIcon = deviceBadge.icon;
+
+  useEffect(() => {
+    let active = true;
+    if (isImage) {
+      getFileDownloadURL(file.storage_path)
+        .then((url) => {
+          if (active) setThumbnailUrl(url);
+        })
+        .catch(console.warn);
+    }
+    return () => { active = false; };
+  }, [file.storage_path, isImage]);
+
+  const handleToggleStar = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const newStatus = !file.is_starred;
+      onUpdate({ ...file, is_starred: newStatus });
+      await toggleStarFile(file.id, newStatus);
+    } catch (err) {
+      console.error("Star toggle error:", err);
+      onUpdate(file); // revert
+    }
+  };
 
   const handleSaveEdit = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -200,31 +248,12 @@ export const FileItem = ({ file, index, onDelete, onPreview, onUpdate }: FileIte
       setIsEditing(false);
       onUpdate(updatedFile);
     } catch (err) {
-      console.error("Failed to update file metadata:", err);
-      alert("Failed to update file details. Please try again.");
+      console.error("Failed to update file:", err);
+      alert("Failed to update file details.");
     } finally {
       setIsSaving(false);
     }
   };
-
-  const isImage = getFileType(file.filename) === 'image';
-  const isPreviewable = getFileType(file.filename) !== 'unknown';
-  const deviceType = getDeviceFromPath(file.storage_path);
-  const deviceBadge = getDeviceBadgeInfo(deviceType);
-
-  useEffect(() => {
-    const fetchThumbnail = async () => {
-      if (isImage) {
-        try {
-          const url = await getFileDownloadURL(file.storage_path);
-          setThumbnailUrl(url);
-        } catch (error) {
-          console.error("Failed to load thumbnail for", file.filename, error);
-        }
-      }
-    };
-    fetchThumbnail();
-  }, [file, isImage]);
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -240,31 +269,66 @@ export const FileItem = ({ file, index, onDelete, onPreview, onUpdate }: FileIte
       document.body.removeChild(a);
     } catch (error) {
       console.error("Download failed:", error);
-      alert("Failed to download file. It may have been deleted.");
+      alert("Failed to download file. It may have expired.");
     } finally {
       setIsDownloading(false);
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent) => {
+  // Trash handling: Soft delete or Permanent delete
+  const handleDeleteAction = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Are you sure you want to delete "${file.filename}"?`)) return;
-    
+
+    if (isTrash) {
+      // Permanent Delete
+      if (!confirm(`Permanently delete "${file.filename}"? This action cannot be undone.`)) return;
+      try {
+        setIsDeleting(true);
+        await deleteFileFromStorage(file.storage_path);
+        await deleteFileMetadata(file.id);
+        onDelete(file.id);
+      } catch (err) {
+        console.error("Permanent delete failed:", err);
+        alert("Failed to permanently delete file.");
+      } finally {
+        setIsDeleting(false);
+      }
+    } else {
+      // Soft Delete -> Move to Trash
+      try {
+        setIsDeleting(true);
+        if (user) {
+          await softDeleteFile(file.id, user.id, file.filename);
+        }
+        onDelete(file.id);
+      } catch (err) {
+        console.error("Move to trash failed:", err);
+        alert("Failed to move file to trash.");
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
+  // Restore from Trash
+  const handleRestore = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       setIsDeleting(true);
-      await deleteFileFromStorage(file.storage_path);
-      await deleteFileMetadata(file.id);
+      if (user) {
+        await restoreFileFromTrash(file.id, user.id, file.filename);
+      }
       onDelete(file.id);
-    } catch (error) {
-      console.error("Delete failed:", error);
-      alert("Failed to delete file.");
+    } catch (err) {
+      console.error("Restore failed:", err);
+      alert("Failed to restore file.");
+    } finally {
       setIsDeleting(false);
     }
   };
 
   const handlePreview = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    // If it's an image and we already have thumbnailUrl, use it
     if (isImage && thumbnailUrl) {
       onPreview(thumbnailUrl);
       return;
@@ -272,11 +336,10 @@ export const FileItem = ({ file, index, onDelete, onPreview, onUpdate }: FileIte
 
     try {
       setIsPreviewLoading(true);
-      // Generate a fresh signed URL (valid for 60 seconds)
       const url = await getFileDownloadURL(file.storage_path);
       onPreview(url);
     } catch (error) {
-      console.error("Failed to load preview for", file.filename, error);
+      console.error("Preview failed:", error);
       alert("Failed to load preview.");
     } finally {
       setIsPreviewLoading(false);
@@ -292,259 +355,262 @@ export const FileItem = ({ file, index, onDelete, onPreview, onUpdate }: FileIte
   const IconComponent = iconInfo.icon;
 
   return (
-    <div 
-      style={{ animationDelay: `${index * 60}ms` }}
-      className="perspective-1000 w-full h-60 relative select-none animate-slide-up-fade"
-    >
+    <>
       <div 
-        className={`w-full h-full relative transition-transform duration-500 ease-in-out preserve-3d ${
-          isExpanded ? 'rotate-y-180' : ''
-        }`}
-        onClick={() => setIsExpanded(!isExpanded)}
+        style={{ animationDelay: `${index * 50}ms` }}
+        className="perspective-1000 w-full h-64 relative select-none animate-slide-up-fade"
       >
-        {/* Front Face: The main card preview and basic details */}
-        <div className="backface-hidden absolute inset-0 w-full h-full bg-slate-800/40 hover:bg-slate-800/60 border border-slate-700/50 hover:border-slate-600 rounded-xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-all duration-300">
-          {/* Top: Thumbnail preview / Styled File icon */}
-          <div className="flex-1 flex items-center justify-center min-h-0 py-2">
-            {isImage && thumbnailUrl ? (
-              <img 
-                src={thumbnailUrl} 
-                alt={file.filename} 
-                className="max-h-24 max-w-full object-contain rounded-lg shadow-sm transition-transform duration-300 group-hover:scale-105" 
-                onClick={(e) => e.stopPropagation()} 
-              />
-            ) : (
-              <div className={`p-4 rounded-xl border shrink-0 transition-transform duration-300 group-hover:scale-105 ${iconInfo.color}`}>
-                <IconComponent className="w-10 h-10" />
+        <div 
+          className={`w-full h-full relative transition-transform duration-500 ease-in-out preserve-3d ${
+            isExpanded ? 'rotate-y-180' : ''
+          }`}
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          {/* FRONT FACE */}
+          <div className="backface-hidden absolute inset-0 w-full h-full bg-slate-800/40 hover:bg-slate-800/60 border border-slate-700/60 hover:border-slate-500 rounded-2xl p-4 flex flex-col justify-between shadow-md transition-all duration-300">
+            {/* Top Bar: Device badge & Star button */}
+            <div className="flex items-center justify-between shrink-0">
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${deviceBadge.color}`}>
+                <DeviceIcon className="w-3.5 h-3.5" />
+                <span>{deviceType}</span>
               </div>
-            )}
-          </div>
 
-          {/* Middle: Title & Exact MB Size */}
-          <div className="flex flex-col min-w-0 mt-2 shrink-0">
-            <span className="text-slate-200 font-medium truncate text-center" title={file.filename}>
-              {file.filename}
-            </span>
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mt-1">
-              <span>{formatSizeInMB(file.file_size)}</span>
-              <span className="w-1 h-1 bg-slate-600 rounded-full" />
-              <span>{timeAgo}</span>
-            </div>
-          </div>
-
-          {/* Bottom: Action Buttons */}
-          <div className="flex items-center justify-between border-t border-slate-700/30 pt-3 mt-3 shrink-0">
-            <button
-              onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
-              className="text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 hover:underline"
-              title="Show details"
-            >
-              Details
-            </button>
-            <div className="flex items-center gap-1.5">
-              {isPreviewable && (
+              {!isTrash && (
                 <button
-                  onClick={handlePreview}
-                  disabled={isDeleting || isDownloading || isPreviewLoading}
-                  className="p-1.5 text-slate-400 hover:text-green-400 hover:bg-green-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
-                  title="Preview file"
+                  onClick={handleToggleStar}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    file.is_starred 
+                      ? "text-amber-400 hover:text-amber-300 bg-amber-400/10" 
+                      : "text-slate-500 hover:text-slate-300 hover:bg-slate-700/40"
+                  }`}
+                  title={file.is_starred ? "Remove from starred" : "Star file"}
                 >
-                  {isPreviewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                  <Star className={`w-4 h-4 ${file.is_starred ? "fill-amber-400" : ""}`} />
                 </button>
               )}
-              <button
-                onClick={handleDownload}
-                disabled={isDownloading || isDeleting}
-                className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
-                title="Download file"
-              >
-                {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting || isDownloading}
-                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
-                title="Delete file"
-              >
-                {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              </button>
             </div>
-          </div>
-        </div>
 
-        {/* Back Face: Flip Details */}
-        <div 
-          onClick={(e) => e.stopPropagation() /* Prevent flipping back when clicking details page */}
-          className="backface-hidden rotate-y-180 absolute inset-0 w-full h-full bg-slate-900 border border-blue-500/30 rounded-xl p-4 flex flex-col justify-between shadow-lg"
-        >
-          {/* Top: Details title & Flip Back */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
-            <span className="text-slate-200 text-xs font-semibold uppercase tracking-wider">
-              {isEditing ? "Edit File Details" : "File Details"}
-            </span>
-            <div className="flex items-center gap-1.5">
-              {isEditing ? (
-                <>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const lastDot = file.filename.lastIndexOf('.');
-                      setEditedBaseName(lastDot !== -1 ? file.filename.substring(0, lastDot) : file.filename);
-                      setEditedExpiryOption("keep");
-                      setIsEditing(false);
-                    }}
-                    className="text-slate-400 hover:text-slate-200 text-xs font-medium px-2 py-1 rounded bg-slate-800 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveEdit}
-                    disabled={isSaving}
-                    className="text-blue-400 hover:text-blue-300 text-xs font-semibold px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 transition-colors flex items-center gap-1"
-                  >
-                    {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
-                  </button>
-                </>
+            {/* Thumbnail preview / Icon */}
+            <div className="flex-1 flex items-center justify-center min-h-0 py-1">
+              {isImage && thumbnailUrl ? (
+                <img 
+                  src={thumbnailUrl} 
+                  alt={file.filename} 
+                  className="max-h-24 max-w-full object-contain rounded-xl shadow-md transition-transform hover:scale-105" 
+                  onClick={(e) => e.stopPropagation()} 
+                />
               ) : (
-                <>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const lastDot = file.filename.lastIndexOf('.');
-                      setEditedBaseName(lastDot !== -1 ? file.filename.substring(0, lastDot) : file.filename);
-                      setEditedExpiryOption("keep");
-                      setIsEditing(true);
-                    }}
-                    className="text-blue-400 hover:text-blue-300 text-xs font-semibold px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }}
-                    className="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-1 rounded-md transition-colors"
-                    title="Back to front"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </>
+                <div className={`p-4 rounded-2xl border shrink-0 transition-transform hover:scale-105 ${iconInfo.color}`}>
+                  <IconComponent className="w-9 h-9" />
+                </div>
               )}
             </div>
+
+            {/* Middle: Title & Size info */}
+            <div className="flex flex-col min-w-0 shrink-0 text-center px-1">
+              <span className="text-slate-200 font-semibold text-xs sm:text-sm truncate" title={file.filename}>
+                {file.filename}
+              </span>
+              <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 mt-1 font-mono">
+                <span>{formatBytes(file.file_size)}</span>
+                <span className="w-1 h-1 bg-slate-600 rounded-full" />
+                <span>{timeAgo}</span>
+              </div>
+            </div>
+
+            {/* Bottom Actions Toolbar */}
+            <div className="flex items-center justify-between border-t border-slate-700/40 pt-2.5 mt-2 shrink-0">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setIsDetailsOpen(true); }}
+                  className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700/40 rounded-lg transition-colors"
+                  title="File details"
+                >
+                  <Info className="w-4 h-4" />
+                </button>
+                {!isTrash && (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsShareOpen(true); }}
+                      className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
+                      title="Share / Cross-device transfer"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsMoveOpen(true); }}
+                      className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
+                      title="Move to folder"
+                    >
+                      <FolderInput className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1">
+                {isTrash ? (
+                  <>
+                    <button
+                      onClick={handleRestore}
+                      disabled={isDeleting}
+                      className="px-2.5 py-1 text-xs text-emerald-400 hover:bg-emerald-400/10 rounded-lg transition-colors flex items-center gap-1 font-medium"
+                      title="Restore file"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Restore</span>
+                    </button>
+                    <button
+                      onClick={handleDeleteAction}
+                      disabled={isDeleting}
+                      className="p-1.5 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                      title="Permanently delete"
+                    >
+                      {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {isPreviewable && (
+                      <button
+                        onClick={handlePreview}
+                        disabled={isDeleting || isDownloading || isPreviewLoading}
+                        className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/10 rounded-lg transition-colors"
+                        title="Preview"
+                      >
+                        {isPreviewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    )}
+                    <button
+                      onClick={handleDownload}
+                      disabled={isDownloading || isDeleting}
+                      className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
+                      title="Download"
+                    >
+                      {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    </button>
+                    <button
+                      onClick={handleDeleteAction}
+                      disabled={isDeleting || isDownloading}
+                      className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                      title="Move to trash"
+                    >
+                      {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Middle: Details Grid */}
-          <div className="flex-1 flex flex-col justify-start gap-2 py-3 overflow-y-auto text-xs min-h-0 select-text no-scrollbar">
+          {/* BACK FACE (Flip Card for Fast Inline Edit) */}
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="backface-hidden rotate-y-180 absolute inset-0 w-full h-full bg-slate-900 border border-blue-500/40 rounded-2xl p-4 flex flex-col justify-between shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
+              <span className="text-slate-200 text-xs font-semibold uppercase tracking-wider">
+                {isEditing ? "Edit File Details" : "Quick Actions"}
+              </span>
+              <div className="flex items-center gap-1.5">
+                {isEditing ? (
+                  <>
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      className="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded bg-slate-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={isSaving}
+                      className="text-white bg-blue-600 hover:bg-blue-500 text-xs px-2.5 py-1 rounded font-medium flex items-center gap-1"
+                    >
+                      {isSaving && <Loader2 className="w-3 h-3 animate-spin" />} Save
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      const lastDot = file.filename.lastIndexOf('.');
+                      setEditedBaseName(lastDot !== -1 ? file.filename.substring(0, lastDot) : file.filename);
+                      setIsEditing(true);
+                    }}
+                    className="text-blue-400 hover:text-blue-300 text-xs font-medium flex items-center gap-1"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit
+                  </button>
+                )}
+              </div>
+            </div>
+
             {isEditing ? (
-              <>
-                <div className="flex flex-col gap-1 py-1 border-b border-slate-800/40">
-                  <span className="text-slate-500 font-medium">Filename</span>
-                  <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 focus-within:border-blue-500 rounded px-2 py-1 mt-0.5 text-slate-200 font-medium">
-                    <Pencil className="w-3 h-3 text-slate-500 shrink-0" />
+              <div className="flex flex-col gap-2.5 my-auto text-xs">
+                <div>
+                  <label className="text-slate-400 block mb-1">Rename File</label>
+                  <div className="flex items-center gap-1 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-700">
                     <input
                       type="text"
                       value={editedBaseName}
-                      onChange={(e) => setEditedBaseName(e.target.value.replace(/[/\\?%*:|"<>]/g, ""))}
-                      className="bg-transparent outline-none w-full text-slate-200 font-mono text-xs"
-                      disabled={isSaving}
-                      placeholder="Filename"
+                      onChange={(e) => setEditedBaseName(e.target.value)}
+                      className="bg-transparent text-slate-200 outline-none w-full"
                     />
-                    <span className="text-slate-500 font-mono select-none">{ext}</span>
+                    <span className="text-slate-500 font-mono">{ext}</span>
                   </div>
                 </div>
-
-                <div className="flex flex-col gap-1 py-1 border-b border-slate-800/40">
-                  <span className="text-slate-500 font-medium">Expiry / Availability</span>
+                <div>
+                  <label className="text-slate-400 block mb-1">New Expiry Option</label>
                   <select
                     value={editedExpiryOption}
                     onChange={(e) => setEditedExpiryOption(e.target.value)}
-                    className="bg-slate-950 text-slate-200 outline-none border border-slate-800 focus:border-blue-500 rounded px-2 py-1 text-xs w-full cursor-pointer font-mono mt-0.5"
-                    disabled={isSaving}
+                    className="w-full bg-slate-950 text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-700 outline-none"
                   >
-                    <option value="keep">No Change</option>
-                    <option value="1h">1 Hour from now</option>
-                    <option value="6h">6 Hours from now</option>
-                    <option value="24h">24 Hours from now</option>
-                    <option value="never">Never Expires</option>
+                    <option value="keep">Keep Current Expiry</option>
+                    <option value="1h">Expire in 1 Hour</option>
+                    <option value="6h">Expire in 6 Hours</option>
+                    <option value="24h">Expire in 24 Hours</option>
+                    <option value="never">Never Expire</option>
                   </select>
                 </div>
-
-                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
-                  <span className="text-slate-500">Size (MB)</span>
-                  <span className="font-mono text-slate-400">{formatSizeInMB(file.file_size)}</span>
-                </div>
-              </>
+              </div>
             ) : (
-              <>
-                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
-                  <span className="text-slate-500">Device</span>
-                  <span className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium ${deviceBadge.color}`}>
-                    <deviceBadge.icon className="w-3.5 h-3.5" />
-                    {deviceType}
-                  </span>
-                </div>
-                
-                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
-                  <span className="text-slate-500">Size (MB)</span>
-                  <span className="font-mono text-slate-200">{formatSizeInMB(file.file_size)}</span>
-                </div>
-
-                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
-                  <span className="text-slate-500">Extension</span>
-                  <span className="uppercase font-mono text-slate-200">{file.filename.split('.').pop() || 'None'}</span>
-                </div>
-
-                <div className="flex items-center justify-between py-1 border-b border-slate-800/40">
-                  <span className="text-slate-500">Uploaded</span>
-                  <span className="text-slate-200 text-right truncate max-w-[140px]" title={new Date(file.uploaded_at).toLocaleString()}>
-                    {new Date(file.uploaded_at).toLocaleDateString()}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between py-1">
-                  <span className="text-slate-500">Expires</span>
-                  <span className="text-slate-200 text-right truncate max-w-[140px]" title={file.expires_at ? new Date(file.expires_at).toLocaleString() : 'Never'}>
-                    {file.expires_at ? new Date(file.expires_at).toLocaleDateString() : 'Never'}
-                  </span>
-                </div>
-              </>
+              <div className="flex flex-col gap-2 my-auto text-xs text-slate-300">
+                <p className="truncate"><strong>Filename:</strong> {file.filename}</p>
+                <p><strong>Size:</strong> {formatBytes(file.file_size)}</p>
+                <p><strong>Uploaded:</strong> {new Date(file.uploaded_at).toLocaleDateString()}</p>
+                <p><strong>Device:</strong> {deviceType}</p>
+              </div>
             )}
-          </div>
 
-          {/* Bottom Part: Action Buttons */}
-          {!isEditing && (
-            <div className="border-t border-slate-800 pt-3 mt-auto shrink-0 flex justify-end gap-1.5">
-              {isPreviewable && (
-                <button
-                  onClick={handlePreview}
-                  disabled={isDeleting || isDownloading || isPreviewLoading}
-                  className="p-1.5 text-slate-400 hover:text-green-400 hover:bg-green-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
-                  title="Preview file"
-                >
-                  {isPreviewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                </button>
-              )}
-              <button
-                onClick={handleDownload}
-                disabled={isDownloading || isDeleting}
-                className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
-                title="Download file"
-              >
-                {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting || isDownloading}
-                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all hover:scale-110 active:scale-95 disabled:opacity-50"
-                title="Delete file"
-              >
-                {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              </button>
-            </div>
-          )}
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="w-full py-1.5 text-xs text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 rounded-lg text-center font-medium"
+            >
+              Flip Back to Preview
+            </button>
+          </div>
         </div>
       </div>
 
-    </div>
+      {/* Modals */}
+      <ShareModal 
+        file={file} 
+        isOpen={isShareOpen} 
+        onClose={() => setIsShareOpen(false)} 
+      />
+
+      <MoveFolderModal 
+        file={file} 
+        isOpen={isMoveOpen} 
+        onClose={() => setIsMoveOpen(false)} 
+        onMoved={(updated) => onUpdate(updated)} 
+      />
+
+      <FileDetailsModal 
+        file={file} 
+        isOpen={isDetailsOpen} 
+        onClose={() => setIsDetailsOpen(false)} 
+      />
+    </>
   );
 };
-
-
